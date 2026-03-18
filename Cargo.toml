@@ -26,14 +26,13 @@ crossterm = "0.29"
 dark-light = { git = "https://github.com/rust-dark-light/dark-light", branch = "main" }
 eyre = "0.6"
 once_cell = "1.19"
-palate = "0.3.2"
-syntastica = "0.6.1"
-syntastica-highlight = "0.6.1"
-syntastica-parsers-git = { version = "0.6.1", features = ["all"] }
-syntastica-query-preprocessor = "0.6"
-syntastica-themes = "0.6.1"
-tree-sitter-hcl = "1"
-tree-sitter-language = "0.1"
+palate = "0.3.6"
+shlex = "1.3"
+syntastica = { git = "https://github.com/casualjim/syntastica", branch = "expand-languages-git-deploy" }
+syntastica-highlight = { git = "https://github.com/casualjim/syntastica", branch = "expand-languages-git-deploy" }
+syntastica-parsers-git = { git = "https://github.com/casualjim/syntastica", branch = "expand-languages-git-deploy", features = ["all"] }
+syntastica-query-preprocessor = { git = "https://github.com/casualjim/syntastica", branch = "expand-languages-git-deploy" }
+syntastica-themes = { git = "https://github.com/casualjim/syntastica", branch = "expand-languages-git-deploy" }
 
 git2 = { version = "0.20", default-features = false }
 similar = { version = "2.6", default-features = false, features = ["text"] }

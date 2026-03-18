@@ -73,6 +73,15 @@ echo 'fn main() { println!("Hello!"); }' | umber
 cat main.rs | umber -
 ```
 
+Page through `less` with colors preserved:
+
+```bash
+umber --color always main.rs | less -R
+
+# or let umber launch the pager for you
+umber --pager main.rs
+```
+
 ### Line numbers
 
 Show line numbers with the `numbers` style component:
@@ -168,6 +177,21 @@ Popular themes include:
 - `catppuccin-mocha` / `catppuccin-latte` / `catppuccin-frappe` / `catppuccin-macchiato`
 - `solarized-dark` / `solarized-light`
 - `tokyo-night`
+
+### Paging
+
+When you pipe into a pager manually, force ANSI colors and tell `less` to pass them through:
+
+```bash
+umber --color always src/main.rs | less -R
+```
+
+`umber` also has a built-in pager mode that uses `$PAGER` when set, or falls back to `less -R`:
+
+```bash
+umber --pager src/main.rs
+umber --style=numbers,changes --pager Cargo.toml
+```
 
 ### Shell completions
 
@@ -271,12 +295,12 @@ For a complete list, see the [syntastica-parsers documentation](https://docs.rs/
 | Themes | ✅ Many | ✅ Many | ✅ Few | ✅ Many |
 | Git integration | ✅ | ✅ | ❌ | ❌ |
 | Show unprintable chars | ✅ **with colors** | ✅ *no colors* | ❌ | ❌ |
-| Paging | ❌ | ✅ | ❌ | ❌ |
+| Paging | ✅ | ✅ | ❌ | ❌ |
 | Binary files | ❌ | ✅ | ❌ | ❌ |
 
 **Key difference:** umber shows unprintable characters (tabs, line feeds, control chars) **while maintaining syntax highlighting** - unlike `bat -A` which disables colors.
 
-`umber` focuses on being a simple, fast `cat` replacement with excellent syntax highlighting and git change indicators. If you need features like a built-in pager or binary file detection, check out [bat](https://github.com/sharkdp/bat).
+`umber` focuses on being a simple, fast `cat` replacement with excellent syntax highlighting and git change indicators. If you need heavier features like binary file detection, check out [bat](https://github.com/sharkdp/bat).
 
 ## Development
 
