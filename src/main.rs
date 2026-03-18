@@ -1,4 +1,3 @@
-mod custom_langs;
 mod decorations;
 mod git;
 mod unprintable;
@@ -9,19 +8,19 @@ use std::fmt::Write as _;
 use std::fs;
 use std::io::{self, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::str::FromStr;
 
 use clap::{CommandFactory, Parser, ValueEnum};
 use dark_light::Mode as DarkLightMode;
 use decorations::DecorationConfig;
 use eyre::{Result, eyre};
 use palate;
-use syntastica::language_set::{EitherLang, LanguageSet, SupportedLanguage, Union};
+use syntastica::language_set::{LanguageSet, SupportedLanguage};
 use syntastica::renderer::{Renderer, TerminalRenderer};
 use syntastica::theme::{ResolvedTheme, THEME_KEYS};
 use syntastica_highlight::{Highlight, HighlightConfiguration, HighlightEvent, Highlighter};
-use syntastica_parsers_git::{LANGUAGE_NAMES, Lang, LanguageSetImpl};
-
-use custom_langs::{CustomLang, CustomLanguageSet};
+use syntastica_parsers_git::{Lang, LanguageSetImpl};
 
 const STREAM_OUTPUT_BUFFER_BYTES: usize = 64 * 1024;
 const STREAM_OUTPUT_FLUSH_BYTES: usize = 8 * 1024;
@@ -122,7 +121,8 @@ struct Cli {
     long,
     value_enum,
     default_value = "auto",
-    help = "Specify when to use colored output"
+    help = "Specify when to use colored output",
+    long_help = "Specify when to use colored output.\n\n                 Use 'always' when piping into a pager manually, for example:\n                   umber --color always main.rs | less -R"
   )]
   color: ColorWhen,
 
@@ -155,6 +155,13 @@ struct Cli {
 
   #[arg(long, short = 'u', help = "No-op, output is always unbuffered")]
   unbuffered: bool,
+
+  #[arg(
+    long,
+    help = "Page output through less or $PAGER",
+    long_help = "Page output through a pager while preserving ANSI colors.\n\n                 Uses the `PAGER` environment variable when set, otherwise falls back to `less -R`.\n                 When the pager command is `less`, `-R` is added automatically if needed.\n\n                 Examples:\n                   umber --pager src/main.rs\n                   umber --style=numbers,changes --pager Cargo.toml"
+  )]
+  pager: bool,
 
   #[arg(
     long,
@@ -215,7 +222,7 @@ struct RenderContext<'a> {
   squeeze_blank: bool,
   squeeze_limit: usize,
   show_all: bool,
-  language_set: &'a Union<CustomLanguageSet, LanguageSetImpl>,
+  language_set: &'a LanguageSetImpl,
   theme: &'a ResolvedTheme,
 }
 
@@ -243,6 +250,66 @@ struct DecorationsStreamSettings<'a> {
   git_changes: &'a [Option<git::LineChange>],
   theme: &'a ResolvedTheme,
   show_all: bool,
+}
+
+enum OutputTarget {
+  Stdout(io::Stdout),
+  Pager { stdin: ChildStdin, child: Child },
+}
+
+impl OutputTarget {
+  fn new(use_pager: bool) -> Result<Self> {
+    if !use_pager {
+      return Ok(Self::Stdout(io::stdout()));
+    }
+
+    let (program, args) = resolve_pager_command()?;
+    let command = format_command(&program, &args);
+    let mut child = Command::new(&program)
+      .args(&args)
+      .stdin(Stdio::piped())
+      .spawn()
+      .map_err(|err| eyre!("failed to start pager `{command}`: {err}"))?;
+    let stdin = child
+      .stdin
+      .take()
+      .ok_or_else(|| eyre!("failed to open stdin for pager `{command}`"))?;
+
+    Ok(Self::Pager { stdin, child })
+  }
+
+  fn finish(mut self) -> Result<()> {
+    self.flush()?;
+
+    match self {
+      Self::Stdout(_) => Ok(()),
+      Self::Pager { stdin, mut child } => {
+        drop(stdin);
+        let status = child.wait()?;
+        if status.success() {
+          Ok(())
+        } else {
+          Err(eyre!("pager exited with status {status}"))
+        }
+      }
+    }
+  }
+}
+
+impl Write for OutputTarget {
+  fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+    match self {
+      Self::Stdout(stdout) => stdout.write(buf),
+      Self::Pager { stdin, .. } => stdin.write(buf),
+    }
+  }
+
+  fn flush(&mut self) -> io::Result<()> {
+    match self {
+      Self::Stdout(stdout) => stdout.flush(),
+      Self::Pager { stdin, .. } => stdin.flush(),
+    }
+  }
 }
 
 struct StreamBuffer<'a, W> {
@@ -306,7 +373,12 @@ fn main() -> Result<()> {
     }
     return Ok(());
   }
-  let mut use_color = io::stdout().is_terminal();
+  let stdout_is_terminal = io::stdout().is_terminal();
+  if cli.pager && !stdout_is_terminal {
+    return Err(eyre!("--pager requires stdout to be a terminal"));
+  }
+
+  let mut use_color = stdout_is_terminal || cli.pager;
   // Check --no-color flag and NO_COLOR environment variable (https://no-color.org/)
   if cli.no_color || std::env::var("NO_COLOR").is_ok() {
     use_color = false;
@@ -316,10 +388,7 @@ fn main() -> Result<()> {
     ColorWhen::Never => use_color = false,
     ColorWhen::Always => use_color = true,
   }
-  // Use Union to combine custom languages (HCL/Terraform) with syntastica-parsers-git
-  let custom_set = CustomLanguageSet::new();
-  let parser_set = LanguageSetImpl::new();
-  let language_set = Union::new(custom_set, parser_set);
+  let language_set = LanguageSetImpl::new();
   let theme = resolve_theme(&cli.theme);
   let style_config = parse_style_components(cli.style.as_deref());
   let decoration_config = style_config.decoration_config;
@@ -329,7 +398,7 @@ fn main() -> Result<()> {
   let squeeze_blank = cli.squeeze_blank || cli.squeeze_limit.is_some();
   let language_override = match cli.language.as_deref() {
     Some(name) => Some(
-      resolve_language_union(name, &language_set)
+      resolve_language(name, &language_set)
         .ok_or_else(|| eyre!("Unsupported language: {name}"))?,
     ),
     None => None,
@@ -370,7 +439,7 @@ fn main() -> Result<()> {
     theme: &theme,
   };
   let mut state = RenderState::new();
-  let mut stdout = io::stdout().lock();
+  let mut stdout = OutputTarget::new(cli.pager)?;
   let mut stdin = io::stdin();
   let mut stdin_consumed = false;
   let mut wrote_output = false;
@@ -418,7 +487,7 @@ fn main() -> Result<()> {
         buf,
         None,
         spec.line_range,
-        language_override.as_ref().map(clone_either_lang),
+        language_override,
         &ctx,
         &mut state,
       )?;
@@ -433,7 +502,7 @@ fn main() -> Result<()> {
           buf,
           Some(&spec.path),
           spec.line_range,
-          language_override.as_ref().map(clone_either_lang),
+          language_override,
           &ctx,
           &mut state,
         )?;
@@ -446,11 +515,67 @@ fn main() -> Result<()> {
     }
   }
 
-  stdout.flush()?;
+  stdout.finish()?;
   if had_error {
     std::process::exit(1);
   }
   Ok(())
+}
+
+fn resolve_pager_command() -> Result<(String, Vec<String>)> {
+  resolve_pager_command_from_env(std::env::var("PAGER").ok().as_deref())
+}
+
+fn resolve_pager_command_from_env(pager: Option<&str>) -> Result<(String, Vec<String>)> {
+  let Some(raw) = pager.map(str::trim).filter(|value| !value.is_empty()) else {
+    return Ok(("less".to_string(), vec!["-R".to_string()]));
+  };
+
+  let parts = shlex::split(raw).ok_or_else(|| eyre!("invalid PAGER command: {raw}"))?;
+  let (program, args) = parts
+    .split_first()
+    .ok_or_else(|| eyre!("invalid PAGER command: {raw}"))?;
+
+  let mut args = args.to_vec();
+  if pager_uses_less(program) && !less_supports_raw_control_chars(&args) {
+    args.push("-R".to_string());
+  }
+
+  Ok((program.clone(), args))
+}
+
+fn pager_uses_less(program: &str) -> bool {
+  Path::new(program)
+    .file_name()
+    .and_then(|name| name.to_str())
+    .is_some_and(|name| name.eq_ignore_ascii_case("less"))
+}
+
+fn less_supports_raw_control_chars(args: &[String]) -> bool {
+  args.iter().any(|arg| less_arg_supports_raw_control_chars(arg))
+}
+
+fn less_arg_supports_raw_control_chars(arg: &str) -> bool {
+  if arg.eq_ignore_ascii_case("--RAW-CONTROL-CHARS") {
+    return true;
+  }
+
+  if let Some(short_flags) = arg.strip_prefix('-')
+    && !short_flags.starts_with('-')
+  {
+    return short_flags.chars().any(|flag| matches!(flag, 'R' | 'r'));
+  }
+
+  false
+}
+
+fn format_command(program: &str, args: &[String]) -> String {
+  let mut rendered = program.to_string();
+  for arg in args {
+    rendered.push(' ');
+    rendered.push_str(arg);
+  }
+  rendered
 }
 
 fn write_completions(shell: clap_complete::Shell) -> Result<()> {
@@ -466,19 +591,12 @@ fn write_man_page() -> Result<()> {
   Ok(())
 }
 
-fn clone_either_lang(lang: &EitherLang<CustomLang, Lang>) -> EitherLang<CustomLang, Lang> {
-  match lang {
-    EitherLang::Left(custom) => EitherLang::Left(*custom),
-    EitherLang::Right(parser) => EitherLang::Right(*parser),
-  }
-}
-
 fn emit_bytes(
   stdout: &mut impl Write,
   bytes: Vec<u8>,
   path: Option<&Path>,
   line_range: Option<LineRange>,
-  language_override: Option<EitherLang<CustomLang, Lang>>,
+  language_override: Option<Lang>,
   ctx: &RenderContext<'_>,
   state: &mut RenderState,
 ) -> Result<bool> {
@@ -593,71 +711,26 @@ fn emit_bytes(
 fn detect_language(
   path: Option<&Path>,
   content: &str,
-  language_set: &Union<CustomLanguageSet, LanguageSetImpl>,
-) -> Option<EitherLang<CustomLang, Lang>> {
-  let name = detect_language_name(path, content)?;
-  resolve_language_union(name.to_ascii_lowercase(), language_set)
-}
-
-fn resolve_language_union(
-  name: impl AsRef<str>,
-  language_set: &Union<CustomLanguageSet, LanguageSetImpl>,
-) -> Option<EitherLang<CustomLang, Lang>> {
-  let name = name.as_ref().trim();
-  let normalized = name.to_ascii_lowercase();
-
-  // First check if it's a custom language (HCL or Terraform)
-  if let Ok(custom_lang) =
-    <CustomLang as SupportedLanguage<'_, _>>::for_name(&normalized, language_set)
-  {
-    return Some(EitherLang::Left(custom_lang));
-  }
-
-  // Then try the syntastica parsers with aliases
-  let name = match normalized.as_str() {
-    "xml" | "xhtml" | "svg" | "plist" => "html",
-    _ => normalized.as_str(),
-  };
-
-  // Try as a normal language
-  if let Ok(lang) = <Lang as SupportedLanguage<'_, _>>::for_name(name, language_set) {
-    return Some(EitherLang::Right(lang));
-  }
-
-  // Try as an injection language
-  if let Some(lang) = <Lang as SupportedLanguage<'_, _>>::for_injection(name, language_set) {
-    return Some(EitherLang::Right(lang));
-  }
-
-  // Try with canonical names
-  if let Some(canonical) = LANGUAGE_NAMES
-    .iter()
-    .copied()
-    .find(|candidate| candidate.eq_ignore_ascii_case(name))
-    && let Ok(lang) = <Lang as SupportedLanguage<'_, _>>::for_name(canonical, language_set)
-  {
-    return Some(EitherLang::Right(lang));
-  }
-
-  None
-}
-
-fn detect_language_name(path: Option<&Path>, content: &str) -> Option<&'static str> {
-  // Use the new palate API which handles all detection internally
+  language_set: &LanguageSetImpl,
+) -> Option<Lang> {
   let file_type = if let Some(path) = path {
-    palate::try_detect(path, content)?
+    palate::detect(path, content)
   } else {
-    // No path, try to detect from content only
-    // palate requires a path, so use a dummy path
-    palate::try_detect("", content)?
+    palate::detect("", content)
   };
 
-  // Convert FileType to language name string
-  // FileType::Text means no specific language detected
-  match file_type {
-    palate::FileType::Text => None,
-    other => Some(Box::leak(other.to_string().into_boxed_str())),
-  }
+  Lang::for_file_type(file_type, language_set)
+}
+
+fn resolve_language(
+  name: impl AsRef<str>,
+  language_set: &LanguageSetImpl,
+) -> Option<Lang> {
+  let name = name.as_ref().trim();
+
+  // Parse the name as a FileType, then convert directly to Lang
+  let file_type = palate::FileType::from_str(name).ok()?;
+  Lang::for_file_type(file_type, language_set)
 }
 
 #[derive(Debug)]
@@ -675,7 +748,7 @@ impl From<io::Error> for StreamHighlightError {
 fn write_rendered_text(
   stdout: &mut impl Write,
   text: &str,
-  language: Option<EitherLang<CustomLang, Lang>>,
+  language: Option<Lang>,
   line_number_start: usize,
   git_changes: &[Option<git::LineChange>],
   ctx: &RenderContext<'_>,
@@ -724,7 +797,7 @@ fn write_rendered_text(
 fn write_highlighted_text_stream(
   stdout: &mut impl Write,
   text: &str,
-  language: EitherLang<CustomLang, Lang>,
+  language: Lang,
   line_number_start: usize,
   git_changes: &[Option<git::LineChange>],
   ctx: &RenderContext<'_>,
@@ -742,21 +815,9 @@ fn write_highlighted_text_stream(
       .get_language(language)
       .map_err(|_| StreamHighlightError::Highlight)?
   } else if highlight_locals {
-    match language {
-      EitherLang::Right(lang) => get_locals_config(&mut state.locals_configs, lang)?,
-      EitherLang::Left(custom) => language_set
-        .get_language(EitherLang::Left(custom))
-        .map_err(|_| StreamHighlightError::Highlight)?,
-    }
+    get_locals_config(&mut state.locals_configs, language)?
   } else {
-    match language {
-      EitherLang::Right(lang) => {
-        get_highlights_only_config(&mut state.highlights_only_configs, lang)?
-      }
-      EitherLang::Left(custom) => language_set
-        .get_language(EitherLang::Left(custom))
-        .map_err(|_| StreamHighlightError::Highlight)?,
-    }
+    get_highlights_only_config(&mut state.highlights_only_configs, language)?
   };
 
   let iter = state
@@ -771,14 +832,14 @@ fn write_highlighted_text_stream(
         }
 
         let lang_name = lang_name.to_ascii_lowercase();
-        EitherLang::<CustomLang, Lang>::for_name(&lang_name, language_set)
+        Lang::for_name(&lang_name, language_set)
           .ok()
-          .or_else(|| EitherLang::<CustomLang, Lang>::for_injection(&lang_name, language_set))
+          .or_else(|| Lang::for_injection(&lang_name, language_set))
           .or_else(|| {
             lang_name.rsplit_once('/').and_then(|(_, name)| {
-              EitherLang::<CustomLang, Lang>::for_name(name, language_set)
+              Lang::for_name(name, language_set)
                 .ok()
-                .or_else(|| EitherLang::<CustomLang, Lang>::for_injection(name, language_set))
+                .or_else(|| Lang::for_injection(name, language_set))
             })
           })
           .and_then(|lang| language_set.get_language(lang).ok())
