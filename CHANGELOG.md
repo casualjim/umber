@@ -3,6 +3,11 @@
 ### 🚜 Refactor
 
 - Rename project from scat to umber (#8)
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog for v0.5.0 [ci skip]
+- Release umber version 0.5.0
 ## [0.4.1] - 2026-01-27
 
 ### ⚙️ Miscellaneous Tasks
@@ -38,13 +43,13 @@
 ### ⚙️ Miscellaneous Tasks
 
 - Update changelog for v0.3.0 [ci skip]
-- Release umber version 0.3.0
+- Release scat version 0.3.0
 ## [0.2.2] - 2026-01-23
 
 ### ⚙️ Miscellaneous Tasks
 
 - Update changelog for v0.2.2 [ci skip]
-- Release umber version 0.2.2
+- Release scat version 0.2.2
 ## [0.2.1] - 2026-01-16
 
 ### 🐛 Bug Fixes
@@ -54,7 +59,7 @@
 ### ⚙️ Miscellaneous Tasks
 
 - Update changelog for v0.2.1 [ci skip]
-- Release umber version 0.2.1
+- Release scat version 0.2.1
 ## [0.2.0] - 2026-01-15
 
 ### 🚀 Features
@@ -64,7 +69,7 @@
 ### ⚙️ Miscellaneous Tasks
 
 - Update changelog for v0.2.0 [ci skip]
-- Release umber version 0.2.0
+- Release scat version 0.2.0
 ## [0.1.6] - 2026-01-15
 
 ### 🚀 Features
@@ -74,29 +79,29 @@
 ### ⚙️ Miscellaneous Tasks
 
 - Update changelog for v0.1.6 [ci skip]
-- Release umber version 0.1.6
+- Release scat version 0.1.6
 ## [0.1.5] - 2026-01-15
 
 ### ⚙️ Miscellaneous Tasks
 
 - Update changelog for v0.1.5 [ci skip]
-- Release umber version 0.1.5
+- Release scat version 0.1.5
 ## [0.1.4] - 2026-01-15
 
 ### ⚙️ Miscellaneous Tasks
 
 - Update changelog for v0.1.4 [ci skip]
-- Release umber version 0.1.4
+- Release scat version 0.1.4
 ## [0.1.3] - 2026-01-15
 
 ### ⚙️ Miscellaneous Tasks
 
 - Update changelog for v0.1.3 [ci skip]
-- Release umber version 0.1.3
+- Release scat version 0.1.3
 ## [0.1.2] - 2026-01-15
 
 ### ⚙️ Miscellaneous Tasks
 
 - Configure cargo-dist homebrew tap
 - Update changelog for v0.1.2 [ci skip]
-- Release umber version 0.1.2
+- Release scat version 0.1.2
