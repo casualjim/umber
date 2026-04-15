@@ -2,7 +2,7 @@
 
 #MISE description="Build the application (Debug)"
 #MISE sources=["Cargo.toml", "src/**/*.rs"]
-#MISE outputs=["target/debug/context"]
+#MISE outputs=["target/debug/umber"]
 
 echo "🚀 Starting debug build..."
 proj_dir=$(git rev-parse --show-toplevel)

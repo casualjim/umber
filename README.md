@@ -8,7 +8,7 @@ A modern replacement for `cat` with syntax highlighting and automatic language d
 - **Automatic language detection** based on file extension and content
 - **Line numbers** with `--style=numbers`
 - **Git change indicators** showing added, modified, and removed lines with `--style=changes`
-- **Rich highlighting** (language injections / embedded languages) with `--style=rich`
+- **Rich highlighting** (language injections / embedded languages) with `--style=rich`, enabled by default for Markdown
 - **Show unprintable characters** with `-A` / `--show-all` (tabs as →, carriage returns as ↵, etc.) - **unlike bat, syntax highlighting is preserved!**
 - **Theme support** with automatic dark/light mode detection
 - **Stdin support** for piping commands
@@ -107,6 +107,8 @@ umber --style=numbers,changes main.rs
 # Enable richer highlighting (language injections / embedded languages)
 umber --style=rich main.rs
 ```
+
+Markdown files use rich highlighting automatically. For other languages, use `--style=rich`.
 
 Note: `--style=rich` can be significantly slower on very large files.
 
