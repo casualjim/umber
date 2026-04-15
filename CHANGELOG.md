@@ -1,3 +1,14 @@
+## [0.5.2] - 2026-04-15
+
+### 🚀 Features
+
+- *(markdown)* Default to rich highlighting
+## [0.5.1] - 2026-03-18
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog for v0.5.1 [ci skip]
+- Release umber version 0.5.1
 ## [0.5.0] - 2026-01-30
 
 ### 🚜 Refactor
