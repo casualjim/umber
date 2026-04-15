@@ -15,7 +15,6 @@ use clap::{CommandFactory, Parser, ValueEnum};
 use dark_light::Mode as DarkLightMode;
 use decorations::DecorationConfig;
 use eyre::{Result, eyre};
-use palate;
 use syntastica::language_set::{LanguageSet, SupportedLanguage};
 use syntastica::renderer::{Renderer, TerminalRenderer};
 use syntastica::theme::{ResolvedTheme, THEME_KEYS};
@@ -398,8 +397,7 @@ fn main() -> Result<()> {
   let squeeze_blank = cli.squeeze_blank || cli.squeeze_limit.is_some();
   let language_override = match cli.language.as_deref() {
     Some(name) => Some(
-      resolve_language(name, &language_set)
-        .ok_or_else(|| eyre!("Unsupported language: {name}"))?,
+      resolve_language(name, &language_set).ok_or_else(|| eyre!("Unsupported language: {name}"))?,
     ),
     None => None,
   };
@@ -552,7 +550,9 @@ fn pager_uses_less(program: &str) -> bool {
 }
 
 fn less_supports_raw_control_chars(args: &[String]) -> bool {
-  args.iter().any(|arg| less_arg_supports_raw_control_chars(arg))
+  args
+    .iter()
+    .any(|arg| less_arg_supports_raw_control_chars(arg))
 }
 
 fn less_arg_supports_raw_control_chars(arg: &str) -> bool {
@@ -722,10 +722,7 @@ fn detect_language(
   Lang::for_file_type(file_type, language_set)
 }
 
-fn resolve_language(
-  name: impl AsRef<str>,
-  language_set: &LanguageSetImpl,
-) -> Option<Lang> {
+fn resolve_language(name: impl AsRef<str>, language_set: &LanguageSetImpl) -> Option<Lang> {
   let name = name.as_ref().trim();
 
   // Parse the name as a FileType, then convert directly to Lang
@@ -808,7 +805,8 @@ fn write_highlighted_text_stream(
   let theme = ctx.theme;
   let show_all = ctx.show_all;
   let highlight_locals = ctx.highlight_locals;
-  let highlight_injections = ctx.highlight_injections;
+  let highlight_injections =
+    should_highlight_injections(language, ctx.highlight_injections, language_set);
 
   let highlight_config = if highlight_injections {
     language_set
@@ -1275,6 +1273,14 @@ fn display_name_for_spec(spec: &FileSpec) -> String {
   }
 }
 
+fn should_highlight_injections(
+  language: Lang,
+  highlight_injections: bool,
+  language_set: &LanguageSetImpl,
+) -> bool {
+  highlight_injections || resolve_language("markdown", language_set) == Some(language)
+}
+
 fn squeeze_blank_lines_bytes(bytes: &[u8], limit: usize) -> Vec<u8> {
   if bytes.is_empty() {
     return Vec::new();
@@ -1433,4 +1439,26 @@ fn slice_bytes_by_line_range(bytes: &[u8], range: LineRange) -> Vec<u8> {
     out.extend_from_slice(&bytes[start..]);
   }
   out
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn rich_highlighting_is_enabled_by_default_for_markdown() {
+    let language_set = LanguageSetImpl::new();
+    let markdown = resolve_language("markdown", &language_set).expect("markdown language");
+
+    assert!(should_highlight_injections(markdown, false, &language_set));
+  }
+
+  #[test]
+  fn rich_highlighting_stays_opt_in_for_non_markdown_languages() {
+    let language_set = LanguageSetImpl::new();
+    let rust = resolve_language("rust", &language_set).expect("rust language");
+
+    assert!(!should_highlight_injections(rust, false, &language_set));
+    assert!(should_highlight_injections(rust, true, &language_set));
+  }
 }
