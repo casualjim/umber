@@ -1278,7 +1278,8 @@ fn should_highlight_injections(
   highlight_injections: bool,
   language_set: &LanguageSetImpl,
 ) -> bool {
-  highlight_injections || resolve_language("markdown", language_set) == Some(language)
+  let resolved = resolve_language("markdown", language_set);
+  highlight_injections || resolved == Some(language)
 }
 
 fn squeeze_blank_lines_bytes(bytes: &[u8], limit: usize) -> Vec<u8> {

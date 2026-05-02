@@ -6,3 +6,7 @@ experimental = true
 hk = "latest"
 pkl = "latest"
 rust = "latest"
+
+[env]
+SYNTASTICA_PARSERS_CACHE_DIR = "{{ env.HOME }}/.cache/syntastica-parsers"
+SYNTASTICA_PARSERS_CLONE_DIR = "{{ env.HOME }}/.cache/syntastica-parsers-clone"
