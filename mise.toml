@@ -3,6 +3,7 @@ experimental = true
 
 [tools]
 "cargo:samply" = "latest"
+"cargo:cargo-nextest" = "latest"
 hk = "latest"
 pkl = "latest"
 rust = "latest"
