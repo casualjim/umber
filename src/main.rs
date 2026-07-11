@@ -1145,20 +1145,10 @@ fn write_highlight_iter_with_decorations(
 }
 
 fn resolve_theme(theme: &str) -> ResolvedTheme {
-  let theme_name = theme.trim();
-  let theme_key = theme_name.split(':').next().unwrap_or("auto");
-
-  match theme_key {
-    "" | "auto" => resolve_auto_theme(),
-    "dark" => syntastica_themes::catppuccin::mocha(),
-    "light" => syntastica_themes::catppuccin::latte(),
-    _ => {
-      if let Some(theme) = syntastica_themes::from_str(theme_key) {
-        return theme;
-      }
-      resolve_auto_theme()
-    }
+  if let Some(user_theme) = syntastica_themes::from_str(theme.trim()) {
+    return user_theme;
   }
+  resolve_auto_theme()
 }
 
 fn resolve_auto_theme() -> ResolvedTheme {
