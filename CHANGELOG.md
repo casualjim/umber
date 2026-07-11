@@ -11,6 +11,8 @@
 ### ⚙️ Miscellaneous Tasks
 
 - Add syntastica env vars to mise and minor refactor
+- Update changelog for v0.5.3 [ci skip]
+- Release umber version 0.5.3
 ## [0.5.2] - 2026-04-15
 
 ### 🚀 Features
