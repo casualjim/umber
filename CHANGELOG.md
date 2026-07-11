@@ -1,8 +1,26 @@
+## [0.5.3] - 2026-07-11
+
+### 🐛 Bug Fixes
+
+- *(theme)* Resolve --theme via syntastica_themes::from_str
+
+### 💼 Other
+
+- Declare cargo-nextest as a mise tool
+
+### ⚙️ Miscellaneous Tasks
+
+- Add syntastica env vars to mise and minor refactor
 ## [0.5.2] - 2026-04-15
 
 ### 🚀 Features
 
 - *(markdown)* Default to rich highlighting
+
+### ⚙️ Miscellaneous Tasks
+
+- Update changelog for v0.5.2 [ci skip]
+- Release umber version 0.5.2
 ## [0.5.1] - 2026-03-18
 
 ### ⚙️ Miscellaneous Tasks
