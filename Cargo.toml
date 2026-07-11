@@ -1,6 +1,6 @@
 [package]
 name = "umber"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2024"
 authors = ["Ivan Porto Carrero"]
 description = "cat with syntax highlighting - a modern replacement for cat with tree-sitter powered syntax highlighting"
